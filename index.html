@@ -1,0 +1,87 @@
+<!DOCTYPE HTML>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Little Sleeper</title>
+        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/css/bootstrap.min.css">
+        <link rel="stylesheet" href={{ static_url("custom.css") }}>
+
+
+    </head>
+    <body>
+    <div class="container">
+        <div class="header">
+            <nav>
+                <ul class="nav nav-pills pull-right">
+                    <li role="presentation"><a href="http://www.aicbt.com">AICBT Ltd</a></li>
+                </ul>
+            </nav>
+            <h3 class="text-muted">Little Sleeper</h3>
+        </div>
+
+        <!-- current status -->
+        <div class="jumbotron">
+            <h1 class="time_stamp" id="quiet"><span id="time_quiet"></span></h1>
+            <h1 class="time_stamp" id="crying"><span id="time_crying"></span></h1>
+        </div>
+
+        <!-- scrolling volume plot -->
+        <div class="plot-container">
+			<div id="plot" class="plot-placeholder"></div>
+		</div>
+
+        <!-- history -->
+        <table class="table table-hover" id="history_table">
+        </table>
+    </div>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.2/jquery.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/js/bootstrap.min.js"></script>
+    <script language="javascript" type="text/javascript" src={{ static_url("jquery.flot.js") }}></script>
+    <script type="text/javascript">
+    $(function() {
+        var zeros = []
+        for (var i = 0; i < 3600; i++) { zeros.push([i, 0.0]); }
+        var plot = $.plot("#plot", [ zeros ], {
+            series: {
+                color: "#000",
+                shadowSize: 0,	// Drawing is faster without shadows
+                lines: {
+                    lineWidth: 2
+                }
+            },
+            yaxis: {
+                min: 0.0,
+                max: 1.0,
+                show: false
+            },
+            xaxis: {
+                show: false
+            },
+            grid: {
+                borderWidth: 0
+            }
+        });
+
+        var socket = new WebSocket("ws://localhost:8090/ws");
+
+        socket.onmessage = function (message) {
+            $("#time_quiet").text(JSON.parse(message.data).time_quiet);
+            $("#time_crying").text(JSON.parse(message.data).time_crying);
+            var table = "<tr><th>Baby noise start</th><th>Duration</th></tr>";
+            $.each(JSON.parse(message.data).crying_blocks, function( index, crying_block ) {
+               table += "<tr><td>" + crying_block.start_str + "</td><td>" + crying_block.duration + "</td></tr>";
+            });
+            $("#history_table").html(table);
+
+            var data = JSON.parse(message.data).audio_plot;
+            var vals = [];
+			for (var i = 0; i < data.length; i++) { vals.push([i, data[i]]); }
+            plot.setData([ vals ]);
+            plot.draw();
+        };
+    });
+    </script>
+
+    </body>
+</html>
