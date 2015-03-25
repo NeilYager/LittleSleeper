@@ -63,7 +63,7 @@
             }
         });
 
-        var socket = new WebSocket("ws://localhost:8090/ws");
+        var socket = new WebSocket("ws://raspberrypi:8090/ws");
 
         socket.onmessage = function (message) {
             $("#time_quiet").text(JSON.parse(message.data).time_quiet);

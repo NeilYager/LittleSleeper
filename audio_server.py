@@ -1,21 +1,19 @@
+import sys
 import pyaudio
 import numpy as np
 import time
 import multiprocessing as mp
 from multiprocessing.connection import Listener
 import ctypes
-from scipy import ndimage
+from scipy import ndimage, interpolate
 from datetime import datetime, timedelta
 
-THRESHOLD = 500
-CHUNK_SIZE = 1024
+CHUNK_SIZE = 8192
 FORMAT = pyaudio.paInt16
-RATE = 44100
-BUFFER_HOURS = 12
-SAMPLE_TIME = 0.9  # how many seconds of audio to grab at a time
-LISTENER_ADDRESS = ('localhost', 6000)
+RATE = 9600#48000
+BUFFER_HOURS = 1
+AUDIO_SERVER_ADDRESS = ('localhost', 6000)
 
-# TODO: test overflow (set to capture 10 mins)
 
 def process_audio(shared_audio, shared_time, shared_pos, lock):
     """
@@ -27,13 +25,14 @@ def process_audio(shared_audio, shared_time, shared_pos, lock):
     :param lock:
     :return:
     """
+
+    # open default audio input stream
     p = pyaudio.PyAudio()
-    stream = p.open(format=FORMAT, channels=1, rate=RATE,
-                    input=True, output=True, frames_per_buffer=CHUNK_SIZE)
+    stream = p.open(format=FORMAT, channels=1, rate=RATE, input=True, frames_per_buffer=CHUNK_SIZE)
 
     while True:
-        # grab audio
-        audio = np.fromstring(stream.read(int(SAMPLE_TIME*RATE)), np.int16)
+        # grab audio and timestamp
+        audio = np.fromstring(stream.read(CHUNK_SIZE), np.int16)
         current_time = time.time()
 
         # acquire lock
@@ -42,7 +41,7 @@ def process_audio(shared_audio, shared_time, shared_pos, lock):
         # record current time
         shared_time[shared_pos.value] = current_time
 
-        # find the maximum volume in this time slice
+        # record the maximum volume in this time slice
         shared_audio[shared_pos.value] = np.abs(audio).max()
 
         # increment counter
@@ -67,7 +66,7 @@ def format_time_difference(time1, time2):
 def process_requests(shared_audio, shared_time, shared_pos, lock):
     """
     Handle requests from the web server. First get the latest data, and
-    then analyse it to find the current state of the baby.
+     then analyse it to find the current noise state
 
     :param shared_audio:
     :param shared_time:
@@ -75,7 +74,8 @@ def process_requests(shared_audio, shared_time, shared_pos, lock):
     :param lock:
     :return:
     """
-    listener = Listener(LISTENER_ADDRESS)
+
+    listener = Listener(AUDIO_SERVER_ADDRESS)
     while True:
         conn = listener.accept()
 
@@ -98,12 +98,18 @@ def process_requests(shared_audio, shared_time, shared_pos, lock):
         time_stamps = np.roll(time_stamps, shift=buffer_len-current_pos)
         audio_signal = np.roll(audio_signal, shift=buffer_len-current_pos)
 
-        # normalise and apply some smoothing
+        # normalise volume level
         audio_signal /= parameters['upper_limit']
-        audio_signal = ndimage.gaussian_filter1d(audio_signal, sigma=3, mode="reflect")
 
-        # save the last hour for the plot
-        audio_plot = audio_signal[-3600:]
+        # apply some smoothing
+        sigma = 4 * (RATE / float(CHUNK_SIZE))
+        audio_signal = ndimage.gaussian_filter1d(audio_signal, sigma=sigma, mode="reflect")
+
+        # get the last hour of data for the plot and re-sample to 1 value per second
+        hour_chunks = int(60 * 60 * (RATE / float(CHUNK_SIZE)))
+        xs = np.arange(hour_chunks)
+        f = interpolate.interp1d(xs, audio_signal[-hour_chunks:])
+        audio_plot = f(np.linspace(start=0, stop=xs[-1], num=3600))
 
         # ignore positions with no readings
         mask = time_stamps > 0
@@ -111,14 +117,14 @@ def process_requests(shared_audio, shared_time, shared_pos, lock):
         audio_signal = audio_signal[mask]
 
         # partition the audio history into blocks of type:
-        #   1. crying, where the volume is greater than noise_threshold
+        #   1. noise, where the volume is greater than noise_threshold
         #   2. silence, where the volume is less than noise_threshold
-        crying = audio_signal > parameters['noise_threshold']
+        noise = audio_signal > parameters['noise_threshold']
         silent = audio_signal < parameters['noise_threshold']
 
-        # join "crying blocks" that are closer together than min_quiet_time
+        # join "noise blocks" that are closer together than min_quiet_time
         crying_blocks = []
-        if np.any(crying):
+        if np.any(noise):
             silent_labels, _ = ndimage.label(silent)
             silent_ranges = ndimage.find_objects(silent_labels)
             for silent_block in silent_ranges:
@@ -131,10 +137,10 @@ def process_requests(shared_audio, shared_time, shared_pos, lock):
 
                 interval_length = time_stamps[stop-1] - time_stamps[start]
                 if interval_length < parameters['min_quiet_time']:
-                    crying[start:stop] = True
+                    noise[start:stop] = True
 
-            # find crying blocks start times and duration
-            crying_labels, num_crying_blocks = ndimage.label(crying)
+            # find noise blocks start times and duration
+            crying_labels, num_crying_blocks = ndimage.label(noise)
             crying_ranges = ndimage.find_objects(crying_labels)
             for cry in crying_ranges:
                 start = time_stamps[cry[0].start]
@@ -145,7 +151,7 @@ def process_requests(shared_audio, shared_time, shared_pos, lock):
                 if duration < parameters['min_noise_time']:
                     continue
 
-                # save some info about the crying block
+                # save some info about the noise block
                 crying_blocks.append({'start': start,
                                       'start_str': datetime.fromtimestamp(start).strftime("%I:%M:%S %p").lstrip('0'),
                                       'stop': stop,
@@ -177,7 +183,7 @@ def process_requests(shared_audio, shared_time, shared_pos, lock):
 
 def server():
     # create a buffer large enough to contain BUFFER_HOURS of audio
-    buffer_len = int(BUFFER_HOURS * 60 * 60 * (1.0 / SAMPLE_TIME))
+    buffer_len = int(BUFFER_HOURS * 60 * 60 * (RATE / float(CHUNK_SIZE)))
 
     # create shared memory
     lock = mp.Lock()
@@ -187,7 +193,7 @@ def server():
 
     # start 2 processes:
     # 1. a process to continuously monitor the audio feed
-    # 2. a process to handle requests for the latest data
+    # 2. a process to handle requests for the latest audio data
     p1 = mp.Process(target=process_audio, args=(shared_audio, shared_time, shared_pos, lock))
     p2 = mp.Process(target=process_requests, args=(shared_audio, shared_time, shared_pos, lock))
     p1.start()
