@@ -1,4 +1,3 @@
-import sys
 import pyaudio
 import numpy as np
 import time
@@ -6,12 +5,12 @@ import multiprocessing as mp
 from multiprocessing.connection import Listener
 import ctypes
 from scipy import ndimage, interpolate
-from datetime import datetime, timedelta
+from datetime import datetime
 
 CHUNK_SIZE = 8192
 FORMAT = pyaudio.paInt16
-RATE = 9600#48000
-BUFFER_HOURS = 1
+SAMPLE_RATE = 16000
+BUFFER_HOURS = 12
 AUDIO_SERVER_ADDRESS = ('localhost', 6000)
 
 
@@ -28,7 +27,7 @@ def process_audio(shared_audio, shared_time, shared_pos, lock):
 
     # open default audio input stream
     p = pyaudio.PyAudio()
-    stream = p.open(format=FORMAT, channels=1, rate=RATE, input=True, frames_per_buffer=CHUNK_SIZE)
+    stream = p.open(format=FORMAT, channels=1, rate=SAMPLE_RATE, input=True, frames_per_buffer=CHUNK_SIZE)
 
     while True:
         # grab audio and timestamp
@@ -102,11 +101,11 @@ def process_requests(shared_audio, shared_time, shared_pos, lock):
         audio_signal /= parameters['upper_limit']
 
         # apply some smoothing
-        sigma = 4 * (RATE / float(CHUNK_SIZE))
+        sigma = 4 * (SAMPLE_RATE / float(CHUNK_SIZE))
         audio_signal = ndimage.gaussian_filter1d(audio_signal, sigma=sigma, mode="reflect")
 
         # get the last hour of data for the plot and re-sample to 1 value per second
-        hour_chunks = int(60 * 60 * (RATE / float(CHUNK_SIZE)))
+        hour_chunks = int(60 * 60 * (SAMPLE_RATE / float(CHUNK_SIZE)))
         xs = np.arange(hour_chunks)
         f = interpolate.interp1d(xs, audio_signal[-hour_chunks:])
         audio_plot = f(np.linspace(start=0, stop=xs[-1], num=3600))
@@ -132,7 +131,7 @@ def process_requests(shared_audio, shared_time, shared_pos, lock):
                 stop = silent_block[0].stop
 
                 # don't join silence blocks at the beginning or end
-                if start == 0:# or stop == len(audio_signal):
+                if start == 0:
                     continue
 
                 interval_length = time_stamps[stop-1] - time_stamps[start]
@@ -183,7 +182,7 @@ def process_requests(shared_audio, shared_time, shared_pos, lock):
 
 def server():
     # create a buffer large enough to contain BUFFER_HOURS of audio
-    buffer_len = int(BUFFER_HOURS * 60 * 60 * (RATE / float(CHUNK_SIZE)))
+    buffer_len = int(BUFFER_HOURS * 60 * 60 * (SAMPLE_RATE / float(CHUNK_SIZE)))
 
     # create shared memory
     lock = mp.Lock()

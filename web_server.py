@@ -12,16 +12,19 @@ from multiprocessing.connection import Client
 AUDIO_ADDRESS = ('localhost', 6000)
 HTTP_PORT = 8090
 
-# depends on: microphone sensitivity, distance to crib, amount of smoothing
+# The highest (practical) volume for the microphone, which is used to normalize the signal
+#  This depends on: microphone sensitivity, distance to crib, amount of smoothing
 UPPER_LIMIT = 25000
 
-# depends on: background noise, if baby makes other sounds in his/her sleep
+# After the signal has been normalized to the tange [0, 1], volumes higher than this will be
+#  classified as noise.
+# Vary based on: background noise, how loud the baby is, etc.
 NOISE_THRESHOLD = 0.25
 
-# number of seconds of quiet before transition mode from "crying" to "quiet"
+# number of seconds of quiet before transition mode from "noise" to "quiet"
 MIN_QUIET_TIME = 30
 
-# number of seconds of noise before transition mode from "quiet" to crying
+# number of seconds of noise before transition mode from "quiet" to "noise"
 MIN_NOISE_TIME = 5
 
 clients = []
