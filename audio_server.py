@@ -8,7 +8,7 @@ from scipy import ndimage, interpolate
 from datetime import datetime
 
 CHUNK_SIZE = 8192
-FORMAT = pyaudio.paInt16
+AUDIO_FORMAT = pyaudio.paInt16
 SAMPLE_RATE = 16000
 BUFFER_HOURS = 12
 AUDIO_SERVER_ADDRESS = ('localhost', 6000)
@@ -27,7 +27,7 @@ def process_audio(shared_audio, shared_time, shared_pos, lock):
 
     # open default audio input stream
     p = pyaudio.PyAudio()
-    stream = p.open(format=FORMAT, channels=1, rate=SAMPLE_RATE, input=True, frames_per_buffer=CHUNK_SIZE)
+    stream = p.open(format=AUDIO_FORMAT, channels=1, rate=SAMPLE_RATE, input=True, frames_per_buffer=CHUNK_SIZE)
 
     while True:
         # grab audio and timestamp
@@ -170,18 +170,17 @@ def process_requests(shared_audio, shared_time, shared_pos, lock):
             else:
                 time_quiet = str_quiet + format_time_difference(crying_blocks[-1]['stop'], time_current)
 
+        # return results to webserver
         results = {'audio_plot': audio_plot,
                    'crying_blocks': crying_blocks,
                    'time_crying': time_crying,
                    'time_quiet': time_quiet}
-
         conn.send(results)
-
         conn.close()
 
 
-def server():
-    # create a buffer large enough to contain BUFFER_HOURS of audio
+def init_server():
+    # figure out how big the buffer needs to be to contain BUFFER_HOURS of audio
     buffer_len = int(BUFFER_HOURS * 60 * 60 * (SAMPLE_RATE / float(CHUNK_SIZE)))
 
     # create shared memory
@@ -200,4 +199,4 @@ def server():
 
 
 if __name__ == '__main__':
-    server()
+    init_server()

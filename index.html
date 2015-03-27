@@ -2,7 +2,7 @@
 <html>
     <head>
         <meta charset="UTF-8">
-        <title>Little Sleeper</title>
+        <title>LittleSleeper</title>
         <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/css/bootstrap.min.css">
         <link rel="stylesheet" href={{ static_url("custom.css") }}>
 
@@ -16,7 +16,7 @@
                     <li role="presentation"><a href="http://www.aicbt.com">AICBT Ltd</a></li>
                 </ul>
             </nav>
-            <h3 class="text-muted">Little Sleeper</h3>
+            <h3 class="text-muted">LittleSleeper</h3>
         </div>
 
         <!-- current status -->
@@ -66,14 +66,18 @@
         var socket = new WebSocket("ws://raspberrypi:8090/ws");
 
         socket.onmessage = function (message) {
+            // update the text display
             $("#time_quiet").text(JSON.parse(message.data).time_quiet);
             $("#time_crying").text(JSON.parse(message.data).time_crying);
+
+            // update the history table
             var table = "<tr><th>Baby noise start</th><th>Duration</th></tr>";
             $.each(JSON.parse(message.data).crying_blocks, function( index, crying_block ) {
                table += "<tr><td>" + crying_block.start_str + "</td><td>" + crying_block.duration + "</td></tr>";
             });
             $("#history_table").html(table);
 
+            // update the plot of the volume levels for the past hour
             var data = JSON.parse(message.data).audio_plot;
             var vals = [];
 			for (var i = 0; i < data.length; i++) { vals.push([i, data[i]]); }
