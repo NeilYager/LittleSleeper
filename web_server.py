@@ -75,7 +75,7 @@ def main():
     )
     http_server = tornado.httpserver.HTTPServer(app)
     http_server.listen(WEB_SERVER_ADDRESS[1], WEB_SERVER_ADDRESS[0])
-    print "Listening on port:", WEB_SERVER_ADDRESS[0]
+    print "Listening on port:", WEB_SERVER_ADDRESS[1]
  
     main_loop = tornado.ioloop.IOLoop.instance()
     scheduler = tornado.ioloop.PeriodicCallback(broadcast_mic_data, 1000, io_loop=main_loop)
