@@ -1,13 +1,12 @@
 import os
 from datetime import datetime
+from multiprocessing.connection import Client
 
+import tornado.gen
 import tornado.httpserver
 import tornado.ioloop
 import tornado.web
 import tornado.websocket
-import tornado.gen
-
-from multiprocessing.connection import Client
 
 AUDIO_SERVER_ADDRESS = ('localhost', 6000)
 WEB_SERVER_ADDRESS = ('0.0.0.0', 8090)

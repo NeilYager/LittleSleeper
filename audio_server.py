@@ -1,11 +1,12 @@
-import pyaudio
-import numpy as np
-import time
-import multiprocessing as mp
-from multiprocessing.connection import Listener
 import ctypes
-from scipy import ndimage, interpolate
+import multiprocessing as mp
+import time
 from datetime import datetime
+from multiprocessing.connection import Listener
+
+import numpy as np
+import pyaudio
+from scipy import interpolate, ndimage
 
 CHUNK_SIZE = 8192
 AUDIO_FORMAT = pyaudio.paInt16
