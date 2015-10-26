@@ -1,0 +1,5 @@
+[audio_server]
+buffer_hours: 12
+host: localhost
+port: 6000
+

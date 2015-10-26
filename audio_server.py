@@ -1,3 +1,5 @@
+import argparse
+import ConfigParser
 import ctypes
 import multiprocessing as mp
 import time
@@ -11,8 +13,9 @@ from scipy import interpolate, ndimage
 CHUNK_SIZE = 8192
 AUDIO_FORMAT = pyaudio.paInt16
 SAMPLE_RATE = 16000
-BUFFER_HOURS = 12
-AUDIO_SERVER_ADDRESS = ('localhost', 6000)
+
+parser = argparse.ArgumentParser(description='Listens from the microphone, records the maximum volume and serves it to the web server process.')
+parser.add_argument('--config', default='default.conf', dest='config_file', help='Configuration file', type=str)
 
 
 def process_audio(shared_audio, shared_time, shared_pos, lock):
@@ -63,11 +66,12 @@ def format_time_difference(time1, time2):
     return str(time_diff).split('.')[0]
 
 
-def process_requests(shared_audio, shared_time, shared_pos, lock):
+def process_requests(listen_on, shared_audio, shared_time, shared_pos, lock):
     """
     Handle requests from the web server. First get the latest data, and
      then analyse it to find the current noise state
 
+    :param listen_on:
     :param shared_audio:
     :param shared_time:
     :param shared_pos:
@@ -75,7 +79,7 @@ def process_requests(shared_audio, shared_time, shared_pos, lock):
     :return:
     """
 
-    listener = Listener(AUDIO_SERVER_ADDRESS)
+    listener = Listener(listen_on)
     while True:
         conn = listener.accept()
 
@@ -180,9 +184,9 @@ def process_requests(shared_audio, shared_time, shared_pos, lock):
         conn.close()
 
 
-def init_server():
-    # figure out how big the buffer needs to be to contain BUFFER_HOURS of audio
-    buffer_len = int(BUFFER_HOURS * 60 * 60 * (SAMPLE_RATE / float(CHUNK_SIZE)))
+def init_server(listen_on, buffer_hours):
+    # figure out how big the buffer needs to be to contain `buffer_hours` of audio
+    buffer_len = int(buffer_hours * 60 * 60 * (SAMPLE_RATE / float(CHUNK_SIZE)))
 
     # create shared memory
     lock = mp.Lock()
@@ -194,10 +198,17 @@ def init_server():
     # 1. a process to continuously monitor the audio feed
     # 2. a process to handle requests for the latest audio data
     p1 = mp.Process(target=process_audio, args=(shared_audio, shared_time, shared_pos, lock))
-    p2 = mp.Process(target=process_requests, args=(shared_audio, shared_time, shared_pos, lock))
+    p2 = mp.Process(target=process_requests, args=(listen_on, shared_audio, shared_time, shared_pos, lock))
     p1.start()
     p2.start()
 
 
 if __name__ == '__main__':
-    init_server()
+    args = parser.parse_args()
+    config = ConfigParser.SafeConfigParser()
+    config.read(args.config_file)
+    init_server(
+        (config.get('audio_server', 'host'), config.get('audio_server', 'port'),),
+        config.get('audio_server', 'buffer_hours')
+    )
+
