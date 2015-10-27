@@ -208,7 +208,7 @@ if __name__ == '__main__':
     config = ConfigParser.SafeConfigParser()
     config.read(args.config_file)
     init_server(
-        (config.get('audio_server', 'host'), config.get('audio_server', 'port'),),
-        config.get('audio_server', 'buffer_hours')
+        (config.get('audio_server', 'host'), int(config.get('audio_server', 'port')),),
+        int(config.get('audio_server', 'buffer_hours'))
     )
 
