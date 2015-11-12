@@ -1,3 +1,5 @@
+import argparse
+import ConfigParser
 import os
 from datetime import datetime
 from multiprocessing.connection import Client
@@ -8,23 +10,9 @@ import tornado.ioloop
 import tornado.web
 import tornado.websocket
 
-AUDIO_SERVER_ADDRESS = ('localhost', 6000)
-WEB_SERVER_ADDRESS = ('0.0.0.0', 8090)
+parser = argparse.ArgumentParser(description='Listens from the microphone, records the maximum volume and serves it to the web server process.')
+parser.add_argument('--config', default='default.conf', dest='config_file', help='Configuration file', type=str)
 
-# The highest (practical) volume for the microphone, which is used to normalize the signal
-#  This depends on: microphone sensitivity, distance to crib, amount of smoothing
-UPPER_LIMIT = 25000
-
-# After the signal has been normalized to the range [0, 1], volumes higher than this will be
-#  classified as noise.
-# Vary based on: background noise, how loud the baby is, etc.
-NOISE_THRESHOLD = 0.25
-
-# seconds of quiet before transition mode from "noise" to "quiet"
-MIN_QUIET_TIME = 30
-
-# seconds of noise before transition mode from "quiet" to "noise"
-MIN_NOISE_TIME = 5
 
 class IndexHandler(tornado.web.RequestHandler):
     def get(self):
@@ -42,13 +30,13 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         clients.remove(self)
 
 
-def broadcast_mic_data():
+def broadcast_mic_data(audio_server, upper_limit, noise_threshold, min_quiet_time, min_noise_time):
     # get the latest data from the audio server
-    parameters = {"upper_limit": UPPER_LIMIT,
-                  "noise_threshold": NOISE_THRESHOLD,
-                  "min_quiet_time": MIN_QUIET_TIME,
-                  "min_noise_time": MIN_NOISE_TIME}
-    conn = Client(AUDIO_SERVER_ADDRESS)
+    parameters = {"upper_limit": upper_limit,
+                  "noise_threshold": noise_threshold,
+                  "min_quiet_time": min_quiet_time,
+                  "min_noise_time": min_noise_time}
+    conn = Client(audio_server)
     conn.send(parameters)
     results = conn.recv()
     conn.close()
@@ -62,7 +50,7 @@ def broadcast_mic_data():
         c.write_message(results)
 
 
-def main():
+def main(audio_server, listen_on, upper_limit, noise_threshold, min_quiet_time, min_noise_time):
     settings = {
         "static_path": os.path.join(os.path.dirname(__file__), "static"),
     }
@@ -73,13 +61,26 @@ def main():
         ], **settings
     )
     http_server = tornado.httpserver.HTTPServer(app)
-    http_server.listen(WEB_SERVER_ADDRESS[1], WEB_SERVER_ADDRESS[0])
-    print "Listening on port:", WEB_SERVER_ADDRESS[1]
+    http_server.listen(listen_on[1], listen_on[0])
+    print "Listening on port:", listen_on[1]
  
     main_loop = tornado.ioloop.IOLoop.instance()
-    scheduler = tornado.ioloop.PeriodicCallback(broadcast_mic_data, 1000, io_loop=main_loop)
+    scheduler = tornado.ioloop.PeriodicCallback(lambda: broadcast_mic_data(audio_server, upper_limit, noise_threshold, min_quiet_time, min_noise_time), 1000, io_loop=main_loop)
     scheduler.start()
     main_loop.start()
  
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    args = parser.parse_args()
+    config = ConfigParser.SafeConfigParser()
+    config_status = config.read(args.config_file)
+    if not config_status:
+        raise IOError("Configuration file '%s' not found." % (args.config_file,))
+    main(
+        (config.get('web_server', 'audio_server_host'), int(config.get('web_server', 'audio_server_port')),),
+        (config.get('web_server', 'host'), int(config.get('web_server', 'port')),),
+        int(config.get('web_server', 'upper_limit')),
+        float(config.get('web_server', 'noise_threshold')),
+        int(config.get('web_server', 'min_quiet_time')),
+        int(config.get('web_server', 'min_noise_time')),
+    )
+
