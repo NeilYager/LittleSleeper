@@ -1,0 +1,21 @@
+[audio_server]
+buffer_hours: 12
+host: localhost
+port: 6000
+
+[web_server]
+audio_server_host: localhost
+audio_server_port: 6000
+host: 0.0.0.0
+port: 8090
+# The highest (practical) volume for the microphone, which is used to normalize the signal
+# This depends on: microphone sensitivity, distance to crib, amount of smoothing
+upper_limit: 25000
+# After the signal has been normalized to the range [0, 1], volumes higher than this will be classified as noise
+# Vary based on: background noise, how loud the baby is, etc.
+noise_threshold: 0.25
+# Seconds of quiet before transition mode from "noise" to "quiet"
+min_quiet_time: 30
+# Seconds of noise before transition mode from "quiet" to "noise"
+min_noise_time: 5
+
