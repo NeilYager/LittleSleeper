@@ -206,7 +206,9 @@ def init_server(listen_on, buffer_hours):
 if __name__ == '__main__':
     args = parser.parse_args()
     config = ConfigParser.SafeConfigParser()
-    config.read(args.config_file)
+    config_status = config.read(args.config_file)
+    if not config_status:
+        raise IOError("Configuration file '%s' not found." % (args.config_file,))
     init_server(
         (config.get('audio_server', 'host'), int(config.get('audio_server', 'port')),),
         int(config.get('audio_server', 'buffer_hours'))
